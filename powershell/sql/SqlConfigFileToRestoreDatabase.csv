@@ -1,0 +1,7 @@
+RestoreDBServerInstance,Port,RestoreDatabaseName,DatabaseBackUpFile
+localhost,1433,master,
+localhost,,model,
+localhost,,msdb,
+localhost,,tempdb,
+localhost,1433,Test5,E:\DBFiles\AdventureWorks2022_Express.bak
+localhost,1433,Test6,E:\DBFiles\DatabaseBackupFile.bak

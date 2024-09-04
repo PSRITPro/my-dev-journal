@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JSON Validator</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        textarea {
+            width: 100%;
+            max-width: 600px;
+            height: 150px;
+        }
+        #output {
+            white-space: pre-wrap; /* Preserve whitespace and line breaks */
+            background-color: #f4f4f4;
+            padding: 10px;
+            border: 1px solid #ddd;
+            margin-top: 10px;
+        }
+        #copyButton {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            padding: 5px 10px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <h1>JSON Validator</h1>
+
+    <!-- File input for JSON file -->
+    <input type="file" id="fileInput" />
+    
+    <hr>
+    
+    <!-- Textarea for JSON input -->
+    <textarea id="jsonInput" placeholder="Paste your JSON here..."></textarea><br>
+    <button id="validateButton">Validate JSON</button>
+    
+    <hr>
+    
+    <!-- Output area for results -->
+    <pre id="output"></pre>
+    <button id="copyButton" class="hidden">Copy to Clipboard</button>
+    
+    <!-- Include JavaScript module -->
+    <script type="module" src="Json_main.js"></script>
+</body>
+</html>

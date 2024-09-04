@@ -1,0 +1,8 @@
+**/logs/
+**/FileStorage/
+*.log
+*.tmp
+*.bak
+*.txt
+*.json
+*.xml
