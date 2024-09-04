@@ -1,25 +1,30 @@
 # Install and import PnP PowerShell if not already installed
 Install-Module -Name PnP.PowerShell -Force -AllowClobber
 
-# Connect to SharePoint Online Admin Center
-Connect-PnPOnline -Url "https://yourtenant-admin.sharepoint.com" -UseWebLogin
+# Load parameters from JSON file
+$jsonFilePath = "parameters.json"
+$jsonContent = Get-Content -Path $jsonFilePath | ConvertFrom-Json
 
-# Define the site URL and list name
-$siteUrl = "https://yourtenant-my.sharepoint.com/personal/username_domain_com"
+# Define SharePoint Online URLs from JSON
+$adminUrl = $jsonContent.AdminSiteUrl
+$oneDriveUrl = $jsonContent.OneDriveSiteUrl
+
+# Define the list name and file type
 $listName = "Documents"
-
-# Define the file type you want to search for
 $fileType = ".docx"
-
-# Define batch size and initial query parameters
 $batchSize = 500
-$position = $null
+
+# Connect to SharePoint Online Admin Center
+Connect-PnPOnline -Url $adminUrl -UseWebLogin
 
 # Connect to the OneDrive site
-Connect-PnPOnline -Url $siteUrl -UseWebLogin
+Connect-PnPOnline -Url $oneDriveUrl -UseWebLogin
+
+# Initialize position for batch retrieval
+$position = $null
 
 do {
-    # Retrieve items in batches using a CAML query
+    # Define CAML query to search for specific file type
     $camlQuery = @"
     <Query>
         <Where>
@@ -37,15 +42,16 @@ do {
     </View>
 "@
 
+    # Retrieve items in batches using CAML query
     $items = Get-PnPListItem -List $listName -Query $camlQuery
 
     foreach ($item in $items) {
-        Write-Output "File: $($item.FieldValues['FileLeafRef']) found in site: $siteUrl"
+        Write-Output "File: $($item.FieldValues['FileLeafRef']) found in site: $oneDriveUrl"
     }
 
-    # Update the position for the next batch
+    # Update position for the next batch
     $position = $items.ListItemCollectionPositionNext
-} while ($position -ne $null)
+} while ($null -ne $position)
 
 # Disconnect from the site
 Disconnect-PnPOnline

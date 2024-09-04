@@ -1,12 +1,19 @@
 # Set location path
 Set-Location -Path $PSScriptRoot
-# Define parameters
-$smtpServer = "smtp.gmail.com"
-$smtpPort = 587
-$from = "pssreddy01@gmail.com"
-$to = "psrsp01@sptrains.onmicrosoft.com"
-# $inputFile = Import-csv "DiskCleanUp.csv"
-# $daysAgo ="-1"
+
+# Load configuration from JSON
+$configFilePath = Join-Path -Path $PSScriptRoot -ChildPath "config.json"
+$config = Get-Content -Path $configFilePath | ConvertFrom-Json
+
+# Access settings from the JSON configuration
+$BackupPath = $config.BackupSettings.BackupPath
+$textFilePath = $config.BackupSettings.TextFilePath
+$smtpServer = $config.SMTPSettings.smtpServer
+$smtpPort = $config.SMTPSettings.smtpPort
+$from = $config.SMTPSettings.from
+$to = $config.SMTPSettings.to
+$passwordFile = $config.SMTPSettings.passwordFile
+
 # Function to format disk space details into HTML
 function Get-DiskSpaceHtml {
     param (
@@ -117,10 +124,6 @@ function Get-DiskSpaceHtml {
     return $body
 }
 
-# Location of Backup Files
-$BackupPath = "E:\GitHub\sptrains\PowerShell\Windows\FileStorage"
-$textFilePath = "E:\GitHub\sptrains\PowerShell\Windows\Logs\BackupSizeReport.txt"
-
 # Get total size of all files after cleanup
 $afterCleanupTotalSize = (Get-ChildItem -Path $BackupPath -File | Measure-Object -Property Length -Sum).Sum
 $afterCleanupTotalSize = [math]::round($afterCleanupTotalSize / 1GB, 2)
@@ -156,8 +159,9 @@ $diskInfoAfter = Get-DiskSpaceHtml -sectionTitle "Database Backup Storage Cleanu
 
 # Define email details
 $subject = "Report: SQL Database Backup Files Cleanup" #on \\$($env:COMPUTERNAME)\$BackupPath"
+
 # Read the password from a file
-$txt = Get-Content "Pass.txt" # Replace with your Gmail password or App Password
+$txt = Get-Content $passwordFile
 $securePassword = ConvertTo-SecureString $txt -AsPlainText -Force
 $credential = New-Object System.Management.Automation.PSCredential ($from, $securePassword)
 

@@ -1,60 +1,59 @@
 # Install and import PnP PowerShell if not already installed
 Install-Module -Name PnP.PowerShell -Force -AllowClobber
 
-# Connect to SharePoint Online Admin Center
-Connect-PnPOnline -Url "https://yourtenant-admin.sharepoint.com" -UseWebLogin
+# Load parameters from JSON file
+$jsonFilePath = "parameters.json"
+$jsonContent = Get-Content -Path $jsonFilePath | ConvertFrom-Json
 
-# Define the OneDrive site URL and list name
-$siteUrl = "https://yourtenant-my.sharepoint.com/personal/username_domain_com"
+# Define SharePoint Online URLs from JSON
+$adminUrl = $jsonContent.AdminSiteUrl
+$oneDriveSiteUrl = $jsonContent.OneDriveSiteUrl  # Added OneDrive site URL
+
+# Define the list name and file types
 $listName = "Documents"
-
-# Define the file types you want to search for
 $fileTypes = @(".docx", ".xlsx", ".pptx")
-
-# Define batch size and initial query parameters
 $batchSize = 500
-$position = $null
+
+# Connect to SharePoint Online Admin Center
+Connect-PnPOnline -Url $adminUrl -UseWebLogin
 
 # Connect to the OneDrive site
-Connect-PnPOnline -Url $siteUrl -UseWebLogin
+Connect-PnPOnline -Url $oneDriveSiteUrl -UseWebLogin  # Use OneDrive site URL here
 
-<Query>
+# Create a CAML query string with multiple file type conditions
+$fileTypeConditions = $fileTypes | ForEach-Object { "<Value Type='Text'>$_</Value>" } -join "`n"
+$query = @"
+<View>
+  <Query>
     <Where>
-        <Or>
-            <Or>
-                <Eq>
-                    <FieldRef Name='FileLeafRef'/>
-                    <Value Type='Text'>docx</Value>
-                </Eq>
-                <Eq>
-                    <FieldRef Name='FileLeafRef'/>
-                    <Value Type='Text'>xlsx</Value>
-                </Eq>
-            </Or>
-            <Eq>
-                <FieldRef Name='FileLeafRef'/>
-                <Value Type='Text'>pptx</Value>
-            </Eq>
-        </Or>
+      <In>
+        <FieldRef Name='File_x0020_Type' />
+        <Values>
+          $fileTypeConditions
+        </Values>
+      </In>
     </Where>
-    <View>
-        <RowLimit>$batchSize</RowLimit>
-    </View>
-</Query>
+    <OrderBy>
+      <FieldRef Name='FileLeafRef' />
+    </OrderBy>
+  </Query>
+  <RowLimit>$batchSize</RowLimit>
+</View>
+"@
 
-# Execute the query
-$camlQuery = New-PnPQuery -Query $query
-# Create the CAML query string with multiple file type conditions
+# Execute the query and retrieve items in batches
+$position = $null
 do {
-    # Retrieve items in batches using the CAML query
-    $items = Get-PnPListItem -List $listName -Query $camlQuery
+    # Retrieve items using the CAML query
+    $items = Get-PnPListItem -List $listName -Query $query -PageSize $batchSize -ListItemCollectionPosition $position
 
     foreach ($item in $items) {
-        Write-Output "File: $($item.FieldValues['FileLeafRef']) found in site: $siteUrl"
+        Write-Output "File: $($item.FieldValues['FileLeafRef']) found in site: $oneDriveSiteUrl"
     }
+
     # Update the position for the next batch
-    $position = $items.ListItemCollectionPositionNext
-} while($position -ne $null)
+    $position = $items.ListItemCollectionPosition
+} while ($null -ne $position)
 
 # Disconnect from the site
 Disconnect-PnPOnline

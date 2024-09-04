@@ -9,12 +9,15 @@ $transcriptFile = ".\logs\$($scriptFileName)_Transcript_$($timestamp).txt"
 # Start transcription
 Start-Transcript -Path $transcriptFile
 
-# Define SharePoint Online URLs
-$spoAdminUrl = "https://org-admin.sharepoint.com"
-$spoSiteColUrl = "https://org.sharepoint.com/sites/Site1"
+# Load parameters from JSON file
+$jsonFilePath = "parameters.json"
+$jsonContent = Get-Content -Path $jsonFilePath | ConvertFrom-Json
+
+# Define SharePoint Online URLs from parameters
+$spoAdminUrl = $jsonContent.AdminSiteUrl
+$spoSiteColUrl = $jsonContent.SiteUrl
 
 Try {
-
     # Connect to SharePoint Online using PnP PowerShell
     Connect-PnPOnline -Url $spoAdminUrl -UseWebLogin -ErrorAction Stop
 

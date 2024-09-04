@@ -1,10 +1,20 @@
-﻿Connect-PnPOnline -Url "https://sptrains-admin.sharepoint.com" -UseWebLogin
-Set-PnPTenantSite -Url "https://sptrains.sharepoint.com/sites/TestSite" -DenyAddAndCustomizePages:$True
+﻿# Load the JSON file
+$jsonFilePath = "parameters.json"
+$jsonContent = Get-Content -Path $jsonFilePath | ConvertFrom-Json
 
-Get-PnPTenantSite -Url "https://sptrains.sharepoint.com/sites/TestSite" | Select-Object DenyAddAndCustomizePages
+# Connect to the SharePoint Online Admin site
+Connect-PnPOnline -Url $jsonContent.AdminSiteUrl -UseWebLogin
 
+# Connect to the site where we will add the app catalog
+Connect-PnPOnline -Url $jsonContent.SiteUrl -UseWebLogin
+
+# Add the site collection app catalog to the specified site
+Add-PnPSiteCollectionAppCatalog -Site $jsonContent.SiteUrl
+Write-Output "Added site collection app catalog to: $($jsonContent.SiteUrl)"
+
+# Remove the site collection app catalog from the specified site
+Remove-PnPSiteCollectionAppCatalog -Site $jsonContent.SiteUrl
+Write-Output "Removed site collection app catalog from: $($jsonContent.SiteUrl)"
+
+# Disconnect from SharePoint Online
 Disconnect-PnPOnline
-Connect-PnPOnline -Url "https://sptrains.sharepoint.com/sites/CommunicationSite2" -UseWebLogin
-Add-PnPSiteCollectionAppCatalog -Site "https://sptrains.sharepoint.com/sites/CommunicationSite2"
-
-Remove-PnPSiteCollectionAppCatalog -Site "https://sptrains.sharepoint.com/sites/TestSite"

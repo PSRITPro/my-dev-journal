@@ -1,12 +1,18 @@
 ﻿# Define parameters
 param(
-    [string]$SiteUrl = "https://abc.sharepoint.com/sites/yoursite",
     [string]$TermStoreName = "Managed Metadata Service",
     [string]$TermGroupName = "TermGroup",
     [string]$TermSetName = "TermSet",
     [string]$TermName = "TermName",
     [string]$NewTermName = "UpdatedTermName"
 )
+
+# Load parameters from JSON file
+$jsonFilePath = "parameters.json"
+$jsonContent = Get-Content -Path $jsonFilePath | ConvertFrom-Json
+
+# Define SharePoint URLs from JSON
+$siteUrl = $jsonContent.SiteUrl
 
 # Get credentials from Azure Automation variables
 $ClientId = Get-AutomationVariable -Name 'ClientId'
@@ -19,9 +25,6 @@ if (-not (Get-Module -ListAvailable -Name "PnP.PowerShell")) {
 }
 
 # Connect to SharePoint Online using Client ID and Secret
-$tenantAdminUrl = "https://abc-admin.sharepoint.com"
-$siteUrl = $SiteUrl
-
 Connect-PnPOnline -Url $siteUrl -ClientId $ClientId -ClientSecret $ClientSecret -Tenant $TenantId
 
 # Load the Term Store Management Shell
