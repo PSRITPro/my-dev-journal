@@ -1,4 +1,6 @@
-﻿# Load the JSON file
+﻿# Set location path
+Set-Location -Path $PSScriptRoot
+# Load the JSON file
 $jsonFilePath = "parameters.json"
 $jsonContent = Get-Content -Path $jsonFilePath | ConvertFrom-Json
 

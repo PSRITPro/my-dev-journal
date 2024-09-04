@@ -3,6 +3,8 @@ param(
     [string]$SourceList = "SourceList",
     [string]$DestinationList = "DestinationList"
 )
+# Set location path
+Set-Location -Path $PSScriptRoott
 
 # Load parameters from JSON file
 $jsonFilePath = "parameters.json"
@@ -11,9 +13,6 @@ $jsonContent = Get-Content -Path $jsonFilePath | ConvertFrom-Json
 # Define SharePoint URLs from JSON
 $sourceSiteUrl = $jsonContent.SourceSiteUrl
 $destinationSiteUrl = $jsonContent.DestinationSiteUrl
-
-# Set location path
-Set-Location -Path $PSScriptRoot
 
 # Connect to source SharePoint site
 Connect-PnPOnline -Url $sourceSiteUrl -UseWebLogin

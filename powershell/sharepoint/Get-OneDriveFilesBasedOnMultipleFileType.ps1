@@ -1,5 +1,5 @@
-# Install and import PnP PowerShell if not already installed
-Install-Module -Name PnP.PowerShell -Force -AllowClobber
+# Set location path
+Set-Location -Path $PSScriptRoot
 
 # Load parameters from JSON file
 $jsonFilePath = "parameters.json"

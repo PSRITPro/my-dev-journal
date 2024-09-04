@@ -1,5 +1,8 @@
-﻿# Load parameters from JSON file
-$jsonFilePath = "config.json"
+﻿# Set location path
+Set-Location -Path $PSScriptRoot
+
+# Load parameters from JSON file
+$jsonFilePath = "parameters.json"
 $jsonContent = Get-Content -Path $jsonFilePath | ConvertFrom-Json
 
 # Define SharePoint connection parameters from JSON
