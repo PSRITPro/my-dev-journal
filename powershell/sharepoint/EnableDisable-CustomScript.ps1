@@ -15,7 +15,7 @@ $jsonContent = Get-Content -Path $jsonFilePath | ConvertFrom-Json
 
 # Define SharePoint Online URLs from parameters
 $spoAdminUrl = $jsonContent.AdminSiteUrl
-$spoSiteColUrl = $jsonContent.SiteUrl
+$spoSiteColUrl = $jsonContent.DestinationSiteUrl
 
 Try {
     # Connect to SharePoint Online using PnP PowerShell
@@ -23,10 +23,10 @@ Try {
 
     Try {
         # Get SharePoint Online tenant site details
-        $spoTenantSite = Get-PnPTenantSite -Url $spoSiteColUrl -ErrorAction Stop
+        $denyAddAndCustomizePages = Get-PnPTenantSite -Url $spoSiteColUrl | Select -ExpandProperty DenyAddAndCustomizePages -ErrorAction Stop
 
-        If ($spoTenantSite.DenyAddAndCustomizePages -eq $false) {
-            Write-Host "Custom script is enabled for this site - $($spoTenantSite.Url)" -ForegroundColor Yellow
+        If ($denyAddAndCustomizePages -eq "Disabled") {
+            Write-Host "Custom script is enabled for this site - $spoSiteColUrl" -ForegroundColor Yellow
             $disableResponse = Read-Host "Do you want to disable it? (Y/N)"
             If ($disableResponse -eq "Y") {
                 Try {
@@ -39,7 +39,7 @@ Try {
             }
         }
         Else {
-            Write-Host "Custom script is disabled for this site - $($spoTenantSite.Url)" -ForegroundColor Yellow
+            Write-Host "Custom script is disabled for this site - $spoSiteColUrl" -ForegroundColor Yellow
             $enableResponse = Read-Host "Do you want to enable it? (Y/N)"
             If ($enableResponse -eq "Y") {
                 Try {
