@@ -43,7 +43,7 @@ while ($hasMorePages) {
     
     # Check if there is another page
     $nextPageUrl = $response.'@odata.nextLink'
-    $hasMorePages = $nextPageUrl -ne $null
+    $hasMorePages = $null -ne $nextPageUrl
 }
 
 # Output the results to a CSV file
