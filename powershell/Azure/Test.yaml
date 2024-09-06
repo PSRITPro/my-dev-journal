@@ -198,7 +198,7 @@ stages:
               inline: |
                 # Check if the AzTable module is installed, if not, install it
                 If (!(Get-Command Get-AzTableRow -ErrorAction Ignore)) {
-                  Write-Host "Installing the AzTable module"
+                  Write-Host "AzTable module is not installed. Installing now..."
                   Install-Module AzTable -Force
                 } Else {
                   Write-Host "AzTable module already installed"
