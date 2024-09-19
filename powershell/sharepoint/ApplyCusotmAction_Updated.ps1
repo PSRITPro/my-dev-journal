@@ -1,4 +1,34 @@
-﻿Set-Location SPSScriptRoot
+﻿<#
+.SYNOPSIS
+This PowerShell script automates the process of managing SharePoint site collections by adding owners, creating custom actions, and configuring lists in newly created site collections. The script generates a report summarizing the operations performed, including the status of custom actions and list configurations.
+
+.DESCRIPTION
+The script performs the following tasks:
+1. Loads configuration settings from a JSON file, including tenant URLs, SMTP settings, and list names.
+2. Connects to the SharePoint tenant and retrieves all site collections.
+3. Compares the current list of site collections to a previous report to identify newly created sites.
+4. For each new site:
+   - Sets the site collection administrator.
+   - Checks for the existence of a custom action and creates one if it does not exist.
+   - Creates and configures a specified list with fields and permissions.
+5. Collects the results of these operations into a daily report.
+6. Sends an email with the report in HTML format to the specified recipients.
+
+.PARAMETER SPSScriptRoot
+The root directory for the script, where logs and configuration files are located.
+
+.PARAMETER ConfigFile
+The path to the configuration JSON file.
+
+.PARAMETER CsvReportFile
+The file path for the CSV report of daily actions performed.
+
+.PARAMETER TransScriptFile
+The file path for the PowerShell transcript log.
+
+#>
+
+Set-Location SPSScriptRoot
 $TransScriptFile = ".\Logs\TransScript $(Get-Date -f yyyyMMdd-HHmmss).log"
 $CsvReportFile = ".\Reports\CA_dailyreport_PROD_$(Get-Date -f yyyyMMdd-HHmmss).csv"
 Start-Transcript $TransScriptFile
