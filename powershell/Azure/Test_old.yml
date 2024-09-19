@@ -1,0 +1,261 @@
+## This YAML Pipeline is used for DB refresh and NEW DB activity
+parameters:
+- name: Delete_Failed_Temp_DBs
+  displayName: "Delete_Failed_Temp_DBs - Select to delete temp DB whenever pipeline failed at or before task '3- Connect to Temp DB and perform Refresh Activity DML'"
+  type: boolean
+  default: false
+
+trigger: none
+
+variables:
+- group: OECM_Automation
+- group: OECM_Automation_AzureStorage
+- group: Wiki_URLs
+- group: Environment_Codes
+
+
+resources:
+ repositories:
+   - repository: 'Wiki_Repository'
+     type: git
+     name: Ontario Student Information System Program Level Planning\Ontario-Student-Information-System.wiki
+
+jobs:
+- job: generator
+  pool: 'gwnp-win2024'
+
+  steps:
+  - checkout: self
+    clean: true
+  - task: PowerShell@2
+    displayName: 'Refresh_Requests_loop'
+    inputs:
+      filePath: '$(System.DefaultWorkingDirectory)/Powershell_scripts/Non_Conversion_Scripts/Refresh_Requests_loop.ps1'
+      arguments: '"$(Organization)" "$(Project)" "$(Group_Id)" "$(System.AccessToken)" "$(DB_Refresh_Query_ID)"'
+
+    name: mtrx
+
+- job: Database_Refresh_Automation
+  timeoutInMinutes: 540
+  pool: 'gwnp-win2024'
+  dependsOn: generator
+  strategy:
+    maxParallel: 1
+    matrix: $[ dependencies.generator.outputs['mtrx.legs'] ]
+  steps:
+  #- script: echo $(id) # echos Task ID's to be Refreshed
+  - checkout: self
+    clean: true
+  - checkout: Wiki_Repository
+    clean: true
+
+  - task: PowerShell@2
+    displayName: 'Fetch values Work Items query'
+    inputs:
+      filePath: '$(System.DefaultWorkingDirectory)/OECM Refresh Database/Powershell_scripts/Non_Conversion_Scripts/Fetch_Workitem.ps1'
+      arguments: '"$(Organization)" "$(Project)" "$(Group_Id)" "$(System.AccessToken)" "$(DB_Refresh_Query_ID)" "$(id)"'
+
+  - task: PowerShell@2
+    displayName: 'Checking RG, DB Server names'
+    inputs:
+      filePath: '$(System.DefaultWorkingDirectory)/OECM Refresh Database/Powershell_scripts/Non_Conversion_Scripts/Check_RG_DB.ps1'
+      arguments: '"$(Organization)" "$(Project)" "$(Group_Id)"  "$(System.AccessToken)" "$(id)"'
+
+  - task: AzurePowerShell@5
+    displayName: 'New_Tenant/DB_Validation'
+    condition: eq(variables['RefreshType'], 'New DB')
+    continueOnError: false
+    enabled: true
+    inputs:
+      azureSubscription: 'autorefresh-service-connection'
+      ScriptType: 'FilePath'
+      ScriptPath: '$(System.DefaultWorkingDirectory)/OECM Refresh Database/Powershell_scripts/Non_Conversion_Scripts/New_Tenant_DB_Validation.ps1'
+      ScriptArguments: '"$(System.AccessToken)" "$(id)" "$(Organization)" "$(Project)" "$(Group_Id)" "$(RefreshType)"'
+      azurePowerShellVersion: OtherVersion
+      preferredAzurePowerShellVersion: 6.6.0
+
+  - task: AzurePowerShell@5
+    displayName: 'Compare Source DB and Target DB Versions'
+    condition: and(succeeded(),eq(variables['RefreshType'], 'Refresh'))
+    enabled: true
+    inputs:
+      azureSubscription: 'autorefresh-service-connection'
+      ScriptType: 'FilePath'
+      ScriptPath: '$(System.DefaultWorkingDirectory)/OECM Refresh Database/Powershell_scripts/Non_Conversion_Scripts/DB_Version_Check.ps1'
+      ScriptArguments: '"$(Organization)" "$(Project)" "$(Group_Id)" "$(id)" "$(System.AccessToken)"'
+      azurePowerShellVersion: OtherVersion
+      preferredAzurePowerShellVersion: 6.6.0
+
+  - task: AzurePowerShell@5
+    displayName: 'Capture Roles Permissions from Target DB'
+    condition: and(succeeded(),eq(variables['RefreshType'], 'Refresh'))
+    enabled: true
+    inputs:
+      azureSubscription: 'autorefresh-service-connection'
+      ScriptType: 'FilePath'
+      ScriptPath: '$(System.DefaultWorkingDirectory)/OECM Refresh Database/Powershell_scripts/Common_Scripts/Capture_Roles_Permissions.ps1'
+      ScriptArguments: '"$(Organization)" "$(Project)" "$(Group_Id)" "$(System.AccessToken)" "$(id)"'
+      azurePowerShellVersion: OtherVersion
+      preferredAzurePowerShellVersion: 6.6.0
+
+  - task: AzurePowerShell@5
+    #displayName: '1a- Connect Target Database and Create the Temporary Database (TargetDB_ddmmyyyy)'
+    displayName: 'Create_TempDB_in_Backend '
+    condition: and(succeeded(),eq(variables['RefreshType'], 'Refresh'))
+    enabled: true
+    inputs:
+      azureSubscription: 'autorefresh-service-connection'
+      ScriptType: 'FilePath'
+      ScriptPath: '$(System.DefaultWorkingDirectory)/OECM Refresh Database/Powershell_scripts/Non_Conversion_Scripts/Create_TempDB_in_Backend.ps1'
+      ScriptArguments: '"$(Organization)" "$(Project)" "$(Group_Id)" "$(System.AccessToken)" "$(id)"'
+      FailOnStandardError: true
+      azurePowerShellVersion: OtherVersion
+      preferredAzurePowerShellVersion: 6.6.0
+
+  - task: AzurePowerShell@5
+    #displayName: '1b- Connect Target Database and Create the New Database'
+    displayName: 'New_Tenant_Create_TempDB_in_Backend.'
+    condition: and(succeeded(),eq(variables['RefreshType'], 'New DB'))
+    enabled: true
+    inputs:
+      azureSubscription: 'autorefresh-service-connection'
+      ScriptType: 'FilePath'
+      ScriptPath: '$(System.DefaultWorkingDirectory)/OECM Refresh Database/Powershell_scripts/Non_Conversion_Scripts/New_Tenant_Create_TempDB_in_Backend.ps1'
+      ScriptArguments: '"$(Organization)" "$(Project)" "$(Group_Id)" "$(System.AccessToken)" "$(RefreshType)" "$(id)"'
+      azurePowerShellVersion: OtherVersion
+      preferredAzurePowerShellVersion: 6.6.0
+
+  - task: AzurePowerShell@5
+    displayName: 'TempDB_Visible_at_Frontend (Validating)'
+    enabled: true
+    inputs:
+      azureSubscription: 'autorefresh-service-connection'
+      ScriptType: 'FilePath'
+      ScriptPath: '$(System.DefaultWorkingDirectory)/OECM Refresh Database/Powershell_scripts/Common_Scripts/Validate_TempDB_Creation.ps1'
+      ScriptArguments: '"$(Organization)" "$(Project)" "$(Group_Id)" "$(System.AccessToken)" "$(RefreshType)" "$(id)"'
+      azurePowerShellVersion: OtherVersion
+      preferredAzurePowerShellVersion: 6.6.0
+
+  - task: AzurePowerShell@5
+    displayName: 'Perform_Post_Refresh_Steps_on_TempDB'
+    enabled: true
+    inputs:
+      azureSubscription: 'autorefresh-service-connection'
+      ScriptType: 'FilePath'
+      ScriptPath: '$(System.DefaultWorkingDirectory)/OECM Refresh Database/Powershell_scripts/Common_Scripts/Perform_Post_Refresh_Steps_on_TempDB.ps1'
+      ScriptArguments: '"$(Organization)" "$(Project)" "$(Group_Id)" "$(System.AccessToken)" "$(RefreshType)" "$(id)"'
+      FailOnStandardError: true
+      azurePowerShellVersion: OtherVersion
+      preferredAzurePowerShellVersion: 6.6.0
+
+  - task: AzurePowerShell@5
+    displayName: 'Delete_Failed_Temp_DBs'
+    condition: and(failed(),eq('${{ parameters.Delete_Failed_Temp_DBs }}', 'true'))
+    inputs:
+      azureSubscription: 'autorefresh-service-connection'
+      ScriptType: 'FilePath'
+      ScriptPath: '$(System.DefaultWorkingDirectory)/OECM Refresh Database/Powershell_scripts/Non_Conversion_Scripts/Delete_Failed_Temp_DBs.ps1'
+      ScriptArguments: '"$(Organization)" "$(Project)" "$(Group_Id)" "$(System.AccessToken)" "$(id)"'
+      azurePowerShellVersion: OtherVersion
+      preferredAzurePowerShellVersion: 6.6.0
+
+  - task: AzurePowerShell@5
+    displayName: 'Perform_Roles_and_Permission_Execution_on_TempDB'
+    condition: and(succeeded(),eq(variables['RefreshType'], 'Refresh'))
+    enabled: true
+    inputs:
+      azureSubscription: 'autorefresh-service-connection'
+      ScriptType: 'FilePath'
+      ScriptPath: '$(System.DefaultWorkingDirectory)/OECM Refresh Database/Powershell_scripts/Common_Scripts/Execute_Roles_and_Permission.ps1'
+      ScriptArguments: '"$(Organization)" "$(Project)" "$(Group_Id)" "$(System.AccessToken)" "$(RefreshType)" "$(id)" "$(DBRoles)" "$(DBPermissions)"'
+      azurePowerShellVersion: OtherVersion
+      preferredAzurePowerShellVersion: 6.6.0
+
+  - task: AzurePowerShell@5
+    displayName: 'New_Tenant_Perform_Roles_and_Permission_Execution_on_TempDB'
+    condition: and(succeeded(),eq(variables['RefreshType'], 'New DB'))
+    enabled: true
+    inputs:
+      azureSubscription: 'autorefresh-service-connection'
+      ScriptType: 'FilePath'
+      ScriptPath: '$(System.DefaultWorkingDirectory)/OECM Refresh Database/Powershell_scripts/Common_Scripts/New_Tenant_Execute_Roles_and_Permission.ps1'
+      ScriptArguments: '"$(Organization)" "$(Project)" "$(Group_Id)" "$(System.AccessToken)" "$(RefreshType)" "$(id)"'
+      azurePowerShellVersion: OtherVersion
+      preferredAzurePowerShellVersion: 6.6.0
+
+  - task: AzurePowerShell@5
+    displayName: 'User_Cleanup_Post_refresh'
+    condition: and(succeeded(),eq(variables['RefreshType'], 'Refresh'))
+    inputs:
+      azureSubscription: 'autorefresh-service-connection'
+      ScriptType: 'FilePath'
+      ScriptPath: '$(System.DefaultWorkingDirectory)/OECM Refresh Database/Powershell_scripts/Common_Scripts/User_Cleanup_Post_refresh.ps1'
+      ScriptArguments: '"$(Organization)" "$(Project)" "$(Group_Id)" "$(System.AccessToken)" "$(id)"'
+      azurePowerShellVersion: OtherVersion
+      preferredAzurePowerShellVersion: 6.6.0
+
+  - task: AzurePowerShell@5
+    displayName: 'New_Tenant_Adding_into_multitenancy.json'
+    condition: and(succeeded(),eq(variables['RefreshType'], 'New DB'))
+    enabled: true
+    inputs:
+      azureSubscription: 'autorefresh-service-connection'
+      ScriptType: 'FilePath'
+      ScriptPath: '$(System.DefaultWorkingDirectory)/OECM Refresh Database/Powershell_scripts/Non_Conversion_Scripts/New_Tenant_Adding_into_multitenancy.ps1'
+      ScriptArguments: '"$(System.AccessToken)" "$(id)"'
+      azurePowerShellVersion: OtherVersion
+      preferredAzurePowerShellVersion: 6.6.0
+
+  - task: AzurePowerShell@5
+    displayName: 'New_Tenant_Post_Refresh_Scripts_Only_QA'
+    enabled: true
+    inputs:
+      azureSubscription: 'autorefresh-service-connection'
+      ScriptType: 'FilePath'
+      ScriptPath: '$(System.DefaultWorkingDirectory)/OECM Refresh Database/Powershell_scripts/Common_Scripts/New_Tenant_Post_Refresh_Scripts_Only_QA.ps1'
+      ScriptArguments: '"$(Organization)" "$(Project)" "$(Group_Id)" "$(System.AccessToken)" "$(RefreshType)" "$(id)"'
+      azurePowerShellVersion: OtherVersion
+      preferredAzurePowerShellVersion: 6.6.0
+
+  - task: AzurePowerShell@5
+    enabled: true
+    displayName: 'Scrambling_in_DV'
+    condition: eq(variables['ScrambleRequired_Flag'],'Yes')
+    inputs:
+      azureSubscription: 'autorefresh-service-connection'
+      ScriptType: 'FilePath'
+      ScriptPath: '$(System.DefaultWorkingDirectory)/OECM Refresh Database/Scrambler/ScramblerUser2.ps1'
+      ScriptArguments: '"$(System.AccessToken)" "$(id)"'
+      azurePowerShellVersion: 'LatestVersion'
+
+  - task: PowerShell@2
+    displayName: 'Update the Work Item Status-Pending Wildfly Restart'
+    inputs:
+      filePath: '$(System.DefaultWorkingDirectory)/OECM Refresh Database/Powershell_scripts/Non_Conversion_Scripts/Update_workItem_Status.ps1'
+      arguments: '"$(Organization)" "$(Project)" "$(Group_Id)" "$(System.AccessToken)" "$(id)"'
+
+  - task: AzurePowerShell@5
+    name: install_aztable_module
+    displayName: "Install AzTable module"
+    inputs:
+      azureSubscription: 'autorefresh-service-connection'
+      azurePowerShellVersion: 'LatestVersion'
+      ScriptType: inlineScript
+      inline: |
+        # We need to install the AzTable module as it's missing in the Azure pipeline
+        If (!(Get-Command Get-AzTableRow -ErrorAction Ignore)) {
+          Write-Host "Installing the AzTable module"
+          Install-Module AzTable -Force
+        } Else {
+          Write-Host "AzTable module already installed"
+        }
+
+  - task: AzurePowerShell@5
+    name: update_wiki
+    displayName: 'Update Wiki'
+    inputs:
+      azureSubscription: 'autorefresh-service-connection'
+      azurePowerShellVersion: 'LatestVersion'
+      ScriptType: 'FilePath'
+      ScriptPath: '$(System.DefaultWorkingDirectory)/OECM Refresh Database/Powershell_scripts/Common_Scripts/WikiUpdate.ps1'
+      ScriptArguments: '-SystemToken "$(System.AccessToken)" -RefreshReqNumber "$(id)" -Organization "$(Organization)" -Project "$(Project)"'
