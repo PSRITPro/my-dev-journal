@@ -13,6 +13,7 @@ $CustomActionTitle = $Config.customActionTitle
 $SiteCollectionAdmin = $Config.siteCollectionAdmin
 $ClientId = $Config.ClientId
 $TeamSitesManagedPath = $Config.teamSitesManagedPath
+$YourListName = $Config.listName  # Assuming this is in your config
 
 # Email Parameters
 $MailTo = $Config.smtpToTest
@@ -28,17 +29,13 @@ $Global:DailyReport = @()
 
 # Function to connect to a site
 function Connect-ToSite {
-    param (
-        [string]$SiteURL
-    )
+    param ([string]$SiteURL)
     Connect-PnPOnline -Url $SiteURL -Credentials $Cred -ClientId $ClientId -ErrorAction Stop
 }
 
 # Function to check if custom action exists
 function Check_CustomAction {
-    param (
-        [string]$SiteURL
-    )
+    param ([string]$SiteURL)
 
     Write-Host "Checking custom action for $SiteURL"
     Connect-ToSite -SiteURL $SiteURL
@@ -53,9 +50,7 @@ function Check_CustomAction {
 
 # Function to create custom action
 function Create_CustomAction {
-    param (
-        [string]$SiteURL
-    )
+    param ([string]$SiteURL)
 
     Write-Host "Creating custom action for $SiteURL"
     Connect-ToSite -SiteURL $SiteURL
@@ -72,9 +67,8 @@ function Create_CustomAction {
     $Ctx.ExecuteQuery()
 }
 
-# Function to add fields and set permissions for the list
-# Function to add fields and set permissions for the list
-function Configure-List {
+# Function to create and configure the list
+function Create_Configure_List {
     param (
         [string]$ListName,
         [string]$AdminUser
@@ -84,42 +78,44 @@ function Configure-List {
     $listExists = Get-PnPList -Identity $ListName -ErrorAction SilentlyContinue
 
     if (-not $listExists) {
-        # Create the list if it does not exist
         Write-Host "List '$ListName' does not exist. Creating the list..." -ForegroundColor Yellow
         New-PnPList -Title $ListName -Template GenericList
         Write-Host "List '$ListName' created successfully." -ForegroundColor Green
-    } else {
-        Write-Host "List '$ListName' already exists." -ForegroundColor Green
-    }
 
-    # Add a multiline text field
-    Add-PnPField -List $ListName -InternalName "WorkDescription" -DisplayName "Work Description" -Type Note -Required -AddToDefaultView
+        # Add fields to the list
+        Add-PnPField -List $ListName -InternalName "WorkDescription" -DisplayName "Work Description" -Type Note -Required -AddToDefaultView
+        Add-PnPField -List $ListName -InternalName "RequestNumber" -DisplayName "Request Number" -Type Text -Required -AddToDefaultView
 
-    # Add a single line text field
-    Add-PnPField -List $ListName -InternalName "RequestNumber" -DisplayName "Request Number" -Type Text -Required -AddToDefaultView
-
-    # Create date field XML
-    $DefaultDate = (Get-Date).ToString("MM/dd/yyyy")
-    $DateFieldXml = @"
+        # Create and add a date field
+        $DefaultDate = (Get-Date).ToString("MM/dd/yyyy")
+        $DateFieldXml = @"
 <Field Type='DateTime' Name='Date' StaticName='Date' DisplayName='Date' Format='DateOnly' Required='TRUE'>
     <Default>$DefaultDate</Default>
 </Field>
 "@
+        Add-PnPFieldFromXml -List $ListName -FieldXml $DateFieldXml
 
-    # Add the date field from XML
-    Add-PnPFieldFromXml -List $ListName -FieldXml $DateFieldXml
+        # Set permissions
+        $SiteOwnersGroup = Get-PnPSiteGroup | Where-Object { $_.Title -like "*Full Control*" } | Select-Object -ExpandProperty Title
+        Set-PnPList -Identity $ListName -BreakRoleInheritance
+        Set-PnPListPermission -Identity $ListName -Group $SiteOwnersGroup -AddRole "Read"
+        Set-PnPListPermission -Identity $ListName -User $AdminUser -AddRole "Full Control"
 
-    # Get the Owners group
-    $SiteOwnersGroup = Get-PnPSiteGroup | Where-Object { $_.Title -like "*Full Control*" } | Select-Object -ExpandProperty Title
-
-    # Break role inheritance and set permissions
-    Set-PnPList -Identity $ListName -BreakRoleInheritance
-    Set-PnPListPermission -Identity $ListName -Group $SiteOwnersGroup -AddRole "Read"
-    Set-PnPListPermission -Identity $ListName -User $AdminUser -AddRole "Full Control"
-
-    Write-Host "Configuration for list '$ListName' completed successfully." -ForegroundColor Green
+        Write-Host "Configuration for list '$ListName' completed successfully." -ForegroundColor Green
+        $Global:DailyReport += [PSCustomObject]@{
+            SiteURL = $ListName
+            CustomActionStatus = "N/A"
+            ListStatus = "List configured successfully."
+        }
+    } else {
+        Write-Host "List '$ListName' already exists." -ForegroundColor Green
+        $Global:DailyReport += [PSCustomObject]@{
+            SiteURL = $ListName
+            CustomActionStatus = "N/A"
+            ListStatus = "List with name '$ListName' already exists."
+        }
+    }
 }
-
 
 # Entry point
 Try {
@@ -136,59 +132,58 @@ Try {
     $CompareReport = Compare-Object -ReferenceObject $OldSitesReport -DifferenceObject $NewSitesReport
 
     foreach ($SiteCollection in $CompareReport) {
-    if ($SiteCollection.SideIndicator -eq "->") {
-        $maxRetries = 3
-        $retryCount = 0
-        $success = $false
+        if ($SiteCollection.SideIndicator -eq "->") {
+            $maxRetries = 3
+            $retryCount = 0
+            $success = $false
 
-        while (-not $success -and $retryCount -lt $maxRetries) {
-            Try {
-                Write-Host "Processing $($SiteCollection.InputObject)"
-                
-                if ($SiteCollection.InputObject.StartsWith($TeamSitesManagedPath)) {
-                    Set-PnPTenantSite -Url $SiteCollection.InputObject -Owners $SiteCollectionAdmin -ErrorAction Stop
-                    Write-Host "Successfully added owners to $SiteCollectionAdmin" -ForegroundColor Green
+            while (-not $success -and $retryCount -lt $maxRetries) {
+                Try {
+                    Write-Host "Processing $($SiteCollection.InputObject)"
 
-                    # Check and create custom action
-                    if (-not (Check_CustomAction -SiteURL $SiteCollection.InputObject)) {
-                        Create_CustomAction -SiteURL $SiteCollection.InputObject
-                        $Global:DailyReport += [PSCustomObject]@{
+                    if ($SiteCollection.InputObject.StartsWith($TeamSitesManagedPath)) {
+                        Set-PnPTenantSite -Url $SiteCollection.InputObject -Owners $SiteCollectionAdmin -ErrorAction Stop
+                        Write-Host "Successfully added owners to $SiteCollectionAdmin" -ForegroundColor Green
+
+                        # Check and create custom action
+                        if (-not (Check_CustomAction -SiteURL $SiteCollection.InputObject)) {
+                            Create_CustomAction -SiteURL $SiteCollection.InputObject
+                            $Global:DailyReport += [PSCustomObject]@{
                                 SiteURL = $SiteCollection.InputObject
-                                Status = "Custom action created successfully."
+                                CustomActionStatus = "Custom action created successfully."
+                                ListStatus = "N/A"
                             }
-                    } else {
-                        Write-Host "Custom Action already exists in $($SiteCollection.InputObject)" -ForegroundColor Yellow
-                        $Global:DailyReport += [PSCustomObject]@{
+                        } else {
+                            Write-Host "Custom Action already exists in $($SiteCollection.InputObject)" -ForegroundColor Yellow
+                            $Global:DailyReport += [PSCustomObject]@{
                                 SiteURL = $SiteCollection.InputObject
-                                Status = "Custom action already exists."
+                                CustomActionStatus = "Custom action already exists."
+                                ListStatus = "N/A"
                             }
-                    }
-
-                    # Configure the list after creating custom action
-                    Configure-List -ListName $YourListName -AdminUser $SiteCollectionAdmin
-                    $Global:DailyReport += [PSCustomObject]@{
-                            SiteURL = $SiteCollection.InputObject
-                            Status = "List configured successfully."
                         }
-                }
-                break  # Exit the retry loop on success
-            } Catch {
-                $retryCount++
-                Write-Host "Error processing $($SiteCollection.InputObject): $($_.Exception.Message)" -ForegroundColor Red
-                
-                if ($retryCount -ge $maxRetries) {
-                    $ErrorOccurredSites = New-Object PSObject
-                    $ErrorOccurredSites | Add-Member -Type NoteProperty -Name "SiteURL" -Value $SiteCollection.InputObject
-                    $ErrorOccurredSites | Add-Member -Type NoteProperty -Name "Status" -Value "Error after $maxRetries attempts"
-                    $Global:DailyReport += $ErrorOccurredSites
-                } else {
-                    Write-Host "Retrying... ($retryCount of $maxRetries)"
-                    Start-Sleep -Seconds 10  # Wait before retrying
+
+                        # Configure the list after creating custom action
+                        Create_Configure_List -ListName $YourListName -AdminUser $SiteCollectionAdmin
+                    }
+                    break  # Exit the retry loop on success
+                } Catch {
+                    $retryCount++
+                    Write-Host "Error processing $($SiteCollection.InputObject): $($_.Exception.Message)" -ForegroundColor Red
+                    
+                    if ($retryCount -ge $maxRetries) {
+                        $Global:DailyReport += [PSCustomObject]@{
+                            SiteURL = $SiteCollection.InputObject
+                            CustomActionStatus = "Error after $maxRetries attempts."
+                            ListStatus = "Error after $maxRetries attempts."
+                        }
+                    } else {
+                        Write-Host "Retrying... ($retryCount of $maxRetries)"
+                        Start-Sleep -Seconds 10  # Wait before retrying
+                    }
                 }
             }
         }
     }
-}
 
 } Catch {
     Write-Host "Overall error: $($_.Exception.Message)" -ForegroundColor Red
@@ -213,13 +208,14 @@ $BodyMail = @"
     <table>
         <tr>
             <th>Site URL</th>
-            <th>Status</th>
+            <th>Custom Action Status</th>
+            <th>List Status</th>
         </tr>
 "@
 
 # Append daily report data to the email body
 $Global:DailyReport | ForEach-Object {
-    $BodyMail += "<tr><td>$($_.SiteURL)</td><td>$($_.Status)</td></tr>"
+    $BodyMail += "<tr><td>$($_.SiteURL)</td><td>$($_.CustomActionStatus)</td><td>$($_.ListStatus)</td></tr>"
 }
 
 $BodyMail += @"
@@ -237,6 +233,5 @@ Try {
 } Catch {
     Write-Host "Error while sending email: $($_.Exception.Message)" -ForegroundColor Red
 }
-
 
 Stop-Transcript
