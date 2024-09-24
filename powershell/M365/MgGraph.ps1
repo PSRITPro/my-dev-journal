@@ -5,7 +5,18 @@ Import-Module Microsoft.Graph.Authentication
 
 # Connect to Microsoft Graph
 Connect-MgGraph -Scopes "User.Read", "Sites.ReadWrite.All" -NoWelcome
-Get-MgSite
+
+$siteId ="8c065f64-098b-4aae-be6f-6b488fca585e"
+$site = Get-MgSite -SiteId $siteId
+
+$siteUrl = "https://sptrains.sharepoint.com/sites/CommunicationSite2"
+Get-MgSite -Filter "WebUrl eq '$siteUrl'"
+
+
+$spoSite = (Get-MgSite | Where-Object {$_.WebUrl -eq $siteUrl}).id
+Get-MgSite -SiteId
+
+Connect-PnPOnline -Url $siteUrl -UseWebLogin
 
 # Check if the connection is successful
 if (-not $?) {

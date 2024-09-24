@@ -28,7 +28,7 @@ The file path for the PowerShell transcript log.
 
 #>
 
-Set-Location SPSScriptRoot
+Set-Location $PSScriptRoot
 $TransScriptFile = ".\Logs\TransScript $(Get-Date -f yyyyMMdd-HHmmss).log"
 $CsvReportFile = ".\Reports\CA_dailyreport_PROD_$(Get-Date -f yyyyMMdd-HHmmss).csv"
 Start-Transcript $TransScriptFile
@@ -151,14 +151,18 @@ function Create_Configure_List {
 Try {
     $TodayDate = (Get-Date).ToString("yyyyMMdd")
     $LastFile = (Get-ChildItem ".\CompareSites report" | Sort-Object LastWriteTime -Descending | Select-Object -First 1).Name
-    $OldSitesReport = Import-Csv -Path ".\CompareSites report\$LastFile" | Select-Object -ExpandProperty "Uri"
+    $OldSitesReport = Import-Csv -Path ".\CompareSites report\$LastFile" | Select-Object -ExpandProperty "Url"
 
     Connect-PnPOnline -Url $TenantAdminURL -Credentials $Cred -ClientId $ClientId -ErrorAction Stop
-    $AllSites = Get-PnPTenantSite | Select-Object Url
+    $AllSites = @()
+    $AllSites += Get-PnPTenantSite | Select-Object Url
     Write-Host "$($AllSites.Count) -- Total sites fetched"
 
+    #storing today result in csv
+    $AllSites | Export-Csv -Path ".\CompareSites report\AllTenantSites_$TodayDate.csv" -NoTypeInformation
+
     # Compare reports and process new sites
-    $NewSitesReport = $AllSites | Export-Csv -Path ".\CompareSites report\AllTenantSites_$TodayDate.csv" -NoTypeInformation
+    $NewSitesReport = Import-Csv -Path ".\CompareSites report\AllTenantSites_$TodayDate.csv" -NoTypeInformation
     $CompareReport = Compare-Object -ReferenceObject $OldSitesReport -DifferenceObject $NewSitesReport
 
     foreach ($SiteCollection in $CompareReport) {
